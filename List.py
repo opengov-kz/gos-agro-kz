@@ -45,7 +45,7 @@ class GosagroParser:
                 logger.info(f" API вернул {len(data['items'])} записей.")
                 return data["items"]
             else:
-                logger.warning("⚠️ API ответил 200 OK, но список `items` пуст.")
+                logger.warning(" API ответил 200 OK, но список `items` пуст.")
                 return []
         except requests.exceptions.RequestException as e:
             logger.error(f"Ошибка при запросе к API: {e}")
@@ -58,7 +58,7 @@ class GosagroParser:
             return
 
         fieldnames = data[0].keys()
-        logger.info(f"💾 Сохранение {len(data)} записей в {csv_path}")
+        logger.info(f"Сохранение {len(data)} записей в {csv_path}")
 
         with open(csv_path, "w", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -90,21 +90,21 @@ class GosagroParser:
             else:
                 break
 
-            logger.info(f"📥 Загружено {len(all_data)} записей на {page-1} страницах.")
+            logger.info(f"Загружено {len(all_data)} записей на {page-1} страницах.")
             time.sleep(1)
 
         return all_data
 
     def run(self, csv_path):
         """Основной метод для запуска парсинга"""
-        logger.info("🚀 Запуск парсера Gosagro")
+        logger.info(" Запуск парсера Gosagro")
         start_date = "2023-01-01 00:00:00"
         end_date = datetime.now().strftime("%Y-%m-%d 23:59:59")
 
         reports_data = self.fetch_all_reports(start_date, end_date)
         self.save_to_csv(reports_data, csv_path)
 
-        logger.info("✅ Парсер Gosagro успешно завершил работу.")
+        logger.info(" Парсер Gosagro успешно завершил работу.")
 
 
 if __name__ == "__main__":
@@ -115,7 +115,7 @@ if __name__ == "__main__":
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     csv_filename = args.output if args.output else f"gosagro_reports_{timestamp}.csv"
 
-    logger.info(f"📁 Файл будет сохранен по пути: {csv_filename}")
+    logger.info(f"Файл будет сохранен по пути: {csv_filename}")
 
     parser = GosagroParser()
     parser.run(csv_filename)
