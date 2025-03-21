@@ -3,14 +3,15 @@ import csv
 import logging
 import argparse
 import time
+import os
 from datetime import datetime
 
-# Настройка логирования (UTF-8)
+log_file = f"gosagro_parser_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
-        logging.FileHandler(f"gosagro_parser_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log", encoding="utf-8"),
+        logging.FileHandler(log_file, encoding="utf-8"),
         logging.StreamHandler()
     ]
 )
@@ -27,50 +28,67 @@ class GosagroParser:
             "Referer": "https://gosagro.kz/",
             "Connection": "keep-alive"
         }
+        self.checkpoint_file = "CheckList.txt"  # Файл для чекпоинта
 
     def fetch_data(self, params):
-        """
-        Получение данных из API
-        """
+        """Запрос данных с API"""
         try:
             logger.info(f" Отправка запроса: {self.api_url} с параметрами {params}")
             response = requests.get(self.api_url, headers=self.headers, params=params)
-            response.raise_for_status()  # Проверка на ошибки HTTP
+            response.raise_for_status()
 
             data = response.json()
-            logger.info(f" Ответ сервера: {data.keys()}")
+            logger.info(f" Ответ сервера содержит ключи: {data.keys()}")
 
-            # Извлекаем данные из ключа 'items', а не 'data'
             if "items" in data and isinstance(data["items"], list):
                 logger.info(f" API вернул {len(data['items'])} записей.")
                 return data["items"]
             else:
-                logger.warning(" API ответил 200 OK, но список `items` пуст.")
+                logger.warning("⚠ API вернул пустой список `items`.")
                 return []
         except requests.exceptions.RequestException as e:
-            logger.error(f"Ошибка при запросе к API: {e}")
+            logger.error(f" Ошибка при запросе к API: {e}")
             return []
 
     def save_to_csv(self, data, csv_path):
         """Сохранение данных в CSV"""
         if not data:
-            logger.warning("Список данных пуст. CSV не будет создан.")
+            logger.warning("⚠ Список данных пуст. CSV не будет обновлен.")
             return
 
+        file_exists = os.path.exists(csv_path)
         fieldnames = data[0].keys()
-        logger.info(f"Сохранение {len(data)} записей в {csv_path}")
 
-        with open(csv_path, "w", newline="", encoding="utf-8") as csvfile:
+        with open(csv_path, "a", newline="", encoding="utf-8") as csvfile:
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+
+            if not file_exists:
+                writer.writeheader()  # Записываем заголовки, если файл новый
+
             writer.writerows(data)
+            csvfile.flush()
+            os.fsync(csvfile.fileno())  # Принудительно записываем на диск
 
-        logger.info(f" Данные успешно сохранены в {csv_path}")
+        logger.info(f" Данные сохранены в {csv_path} ({len(data)} записей).")
 
-    def fetch_all_reports(self, start_date, end_date):
+    def get_last_page(self):
+        """Читаем чекпоинт (последняя загруженная страница)"""
+        if os.path.exists(self.checkpoint_file):
+            with open(self.checkpoint_file, "r") as f:
+                try:
+                    return int(f.read().strip())
+                except ValueError:
+                    return 1
+        return 1
+
+    def save_checkpoint(self, page):
+        """Сохранение номера последней загруженной страницы"""
+        with open(self.checkpoint_file, "w") as f:
+            f.write(str(page))
+
+    def fetch_all_reports(self, start_date, end_date, csv_path):
         """Запрашивает отчет за весь период с постраничной загрузкой"""
-        all_data = []
-        page = 1
+        page = self.get_last_page()
 
         while True:
             params = {
@@ -80,20 +98,19 @@ class GosagroParser:
                 "preparam3": start_date,
                 "preparam4": end_date,
                 "page": page,
-                "perpage": 200
+                "perpage": 500
             }
 
             data = self.fetch_data(params)
             if data:
-                all_data.extend(data)
+                self.save_to_csv(data, csv_path)  # Дописываем данные в CSV
+                self.save_checkpoint(page)  # Обновляем чекпоинт
                 page += 1
             else:
-                break
+                break  # Если данных нет, завершаем
 
-            logger.info(f"Загружено {len(all_data)} записей на {page-1} страницах.")
-            time.sleep(1)
-
-        return all_data
+            logger.info(f" Загружено {page - self.get_last_page()} страниц.")
+            time.sleep(2)  # Пауза перед следующим запросом
 
     def run(self, csv_path):
         """Основной метод для запуска парсинга"""
@@ -101,8 +118,7 @@ class GosagroParser:
         start_date = "2023-01-01 00:00:00"
         end_date = datetime.now().strftime("%Y-%m-%d 23:59:59")
 
-        reports_data = self.fetch_all_reports(start_date, end_date)
-        self.save_to_csv(reports_data, csv_path)
+        self.fetch_all_reports(start_date, end_date, csv_path)
 
         logger.info(" Парсер Gosagro успешно завершил работу.")
 
@@ -113,9 +129,9 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = args.output if args.output else f"gosagro_reports_{timestamp}.csv"
+    csv_filename = args.output if args.output else "gosagro_reports.csv"
 
-    logger.info(f"Файл будет сохранен по пути: {csv_filename}")
+    logger.info(f" Файл будет сохранен по пути: {csv_filename}")
 
     parser = GosagroParser()
     parser.run(csv_filename)
