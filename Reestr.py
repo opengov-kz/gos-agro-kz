@@ -5,7 +5,6 @@ import time
 import os
 from datetime import datetime
 
-# === НАСТРОЙКА ЛОГИРОВАНИЯ ===
 log_file = f"gosagro_parser_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 logging.basicConfig(
     level=logging.INFO,
@@ -17,7 +16,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("gosagro_parser")
 
-# === API НАСТРОЙКИ ===
 BASE_URL = "https://gosagro.kz/restapi/query/get"
 API_PARAMS = {
     "code": "report$its_req_public",
@@ -31,18 +29,17 @@ PER_PAGE = 500  # Количество записей на странице
 SAVE_FILE = "gosagro_reestr.csv"  # Файл CSV
 CHECKPOINT_FILE = "CheckReestr.txt"  # Файл для сохранения прогресса
 
-# === Уникальные записи ===
+
 seen_docnums = set()  # Храним уникальные docnum
 
 
-# === ФУНКЦИЯ ЗАПРОСА ДАННЫХ ===
 def fetch_data(page):
     params = API_PARAMS.copy()
     params["page"] = page
     params["perpage"] = PER_PAGE
 
     try:
-        logger.info(f"📡 Запрос страницы {page}...")
+        logger.info(f" Запрос страницы {page}...")
         response = requests.get(BASE_URL, params=params, timeout=20)
         response.raise_for_status()
         data = response.json()
@@ -53,22 +50,22 @@ def fetch_data(page):
             for item in unique_data:
                 seen_docnums.add(item["docnum"])
 
-            logger.info(f"✅ Страница {page} загружена. Всего: {len(data['items'])}, Уникальных: {len(unique_data)}.")
+            logger.info(f" Страница {page} загружена. Всего: {len(data['items'])}, Уникальных: {len(unique_data)}.")
             return unique_data
         else:
-            logger.warning(f"⚠️ Пустая страница {page}. Остановка парсинга.")
+            logger.warning(f"️ Пустая страница {page}. Остановка парсинга.")
             return []
 
     except requests.exceptions.Timeout:
-        logger.error(f"⏳ Тайм-аут на странице {page}. Повтор через 10 сек...")
+        logger.error(f" Тайм-аут на странице {page}. Повтор через 10 сек...")
         time.sleep(10)
         return fetch_data(page)  # Повторяем запрос
     except requests.exceptions.RequestException as e:
-        logger.error(f"❌ Ошибка на странице {page}: {e}")
+        logger.error(f" Ошибка на странице {page}: {e}")
         return []
 
 
-# === ВОССТАНОВЛЕНИЕ ПРОГРЕССА ===
+#  ВОССТАНОВЛЕНИЕ ПРОГРЕССА
 def get_last_page():
     """Читаем номер последней загруженной страницы из CheckList.txt"""
     if os.path.exists(CHECKPOINT_FILE):
@@ -81,20 +78,17 @@ def get_last_page():
 
 
 def save_checkpoint(page):
-    """Сохраняем номер последней загруженной страницы"""
+
     with open(CHECKPOINT_FILE, "w") as f:
         f.write(str(page))
 
 
-# === ОСНОВНОЙ ПРОЦЕСС ПАРСИНГА ===
 def run_parser():
-    logger.info("🚀 Запуск парсера Gosagro")
+    logger.info("Запуск парсера Gosagro")
 
-    # Определяем с какой страницы начинать
     start_page = get_last_page()
-    logger.info(f"⏩ Продолжение с {start_page}-й страницы.")
+    logger.info(f" Продолжение с {start_page}-й страницы.")
 
-    # Открываем CSV в режиме добавления (append)
     with open(SAVE_FILE, "a", newline="", encoding="utf-8") as csvfile:
         writer = None
         buffered_write = []  # Буфер для пакетной записи
@@ -106,21 +100,18 @@ def run_parser():
                 if not data:
                     break  # Если пустая страница – завершаем парсинг
 
-                # Если writer не создан – создаем с заголовками
                 if writer is None:
                     fieldnames = data[0].keys()
                     writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
                     if start_page == 1 and os.stat(SAVE_FILE).st_size == 0:
                         writer.writeheader()
 
-                # Буферизация данных перед записью
                 buffered_write.extend(data)
 
-                # Записываем данные в CSV каждые 5000 записей (чтобы не перегружать диск)
                 if len(buffered_write) >= 5000:
                     writer.writerows(buffered_write)
                     csvfile.flush()  # Гарантируем, что данные записаны
-                    logger.info(f"💾 Записано {len(buffered_write)} записей в файл.")
+                    logger.info(f" Записано {len(buffered_write)} записей в файл.")
                     buffered_write = []  # Очищаем буфер
 
                 # Сохраняем чекпоинт
@@ -130,18 +121,17 @@ def run_parser():
                 time.sleep(2)  # Пауза между запросами
 
             except Exception as e:
-                logger.error(f"❌ Ошибка обработки страницы {page}: {e}")
+                logger.error(f" Ошибка обработки страницы {page}: {e}")
                 time.sleep(5)
 
-        # Записываем оставшиеся данные
         if buffered_write:
             writer.writerows(buffered_write)
             csvfile.flush()
-            logger.info(f"📌 Последние {len(buffered_write)} записей сохранены.")
+            logger.info(f" Последние {len(buffered_write)} записей сохранены.")
 
-    logger.info(f"✅ Парсер завершил работу. Данные сохранены в {SAVE_FILE}.")
+    logger.info(f" Парсер завершил работу. Данные сохранены в {SAVE_FILE}.")
 
 
-# === ЗАПУСК ===
+#  ЗАПУСК
 if __name__ == "__main__":
     run_parser()
