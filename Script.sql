@@ -1,48 +1,90 @@
--- Создание базы данных
-CREATE DATABASE budget_db;
-
-
--- Таблица организаций
-CREATE TABLE Organization (
-    org_id SERIAL PRIMARY KEY,
-    TOO VARCHAR(255) NOT NULL,
-    Region VARCHAR(100) NOT NULL
+CREATE TABLE "regions" (
+    "id"   SERIAL,
+    "name" VARCHAR(255),
+    PRIMARY KEY ("id")
 );
 
--- Таблица категорий субсидий
-CREATE TABLE Sub_Cate (
-    Cat_id SERIAL PRIMARY KEY,
-    Cat_name VARCHAR(255) NOT NULL
+CREATE TABLE "statuses" (
+    "id"   SERIAL,
+    "name" VARCHAR(255),
+    PRIMARY KEY ("id")
 );
 
--- Таблица статусов
-CREATE TABLE Status (
-    Status_id SERIAL PRIMARY KEY,
-    Status_name VARCHAR(100) NOT NULL
+CREATE TABLE "categories" (
+    "id"   SERIAL,
+    "name" VARCHAR(255),
+    PRIMARY KEY ("id")
 );
 
--- Таблица отказов
-CREATE TABLE Refuse (
-    Refuse_id SERIAL PRIMARY KEY,
-    Refuse_dt DATE,
-    Refuse_txt TEXT
+CREATE TABLE "organizations" (
+    "id"   SERIAL,
+    "name" TEXT,
+    PRIMARY KEY ("id")
 );
 
--- Таблица отзывов
-CREATE TABLE Recall (
-    Recall_id SERIAL PRIMARY KEY,
-    Recall_dt DATE,
-    Recall_txt TEXT
+
+CREATE TABLE "documents" (
+    "id"            SERIAL,
+    "doc_num"       VARCHAR(50) NOT NULL,
+    "summa_subsidy" NUMERIC(15,2),
+    "doc_at"        TIMESTAMP,
+
+    "org_id"        INT,
+    "category_id"   INT,
+    "status_id"     INT,
+    "region_id"     INT,
+
+    PRIMARY KEY ("id"),
+
+    CONSTRAINT "FK_documents_org_id"
+        FOREIGN KEY ("org_id") REFERENCES "organizations"("id"),
+
+    CONSTRAINT "FK_documents_region_id"
+        FOREIGN KEY ("region_id") REFERENCES "regions"("id"),
+
+    CONSTRAINT "FK_documents_status_id"
+        FOREIGN KEY ("status_id") REFERENCES "statuses"("id"),
+
+    CONSTRAINT "FK_documents_category_id"
+        FOREIGN KEY ("category_id") REFERENCES "categories"("id")
 );
 
--- Таблица документов (заявок)
-CREATE TABLE Budget_Documents (
-    docnum SERIAL PRIMARY KEY,
-    Summa NUMERIC(18,2) NOT NULL,
-    doc_at DATE NOT NULL,
-    Recall_id INT REFERENCES Recall(Recall_id) ON DELETE SET NULL,
-    Refuse_id INT REFERENCES Refuse(Refuse_id) ON DELETE SET NULL,
-    org_id INT REFERENCES Organization(org_id) ON DELETE CASCADE,
-    Cat_id INT REFERENCES Sub_Cate(Cat_id) ON DELETE SET NULL,
-    Status_ID INT REFERENCES Status(Status_id) ON DELETE SET NULL
+
+CREATE TABLE "waiting_lists" (
+    "id" INT,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "FK_waiting_lists_documents"
+        FOREIGN KEY ("id") REFERENCES "documents"("id")
 );
+
+
+CREATE TABLE "budget_registry" (
+    "id" INT,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "FK_budget_registry_documents"
+        FOREIGN KEY ("id") REFERENCES "documents"("id")
+);
+
+
+CREATE TABLE "refuses" (
+    "id"                 SERIAL,
+    "refuse_txt"         TEXT,
+    "refuse_at"          TIMESTAMP,
+    "budget_registry_id" INT,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "FK_refuses_budget_registry"
+        FOREIGN KEY ("budget_registry_id")
+            REFERENCES "budget_registry"("id")
+);
+
+CREATE TABLE "recalls" (
+    "id"                 SERIAL,
+    "recall_txt"         TEXT,
+    "recall_at"          TIMESTAMP,
+    "budget_registry_id" INT,
+    PRIMARY KEY ("id"),
+    CONSTRAINT "FK_recalls_budget_registry"
+        FOREIGN KEY ("budget_registry_id")
+            REFERENCES "budget_registry"("id")
+);
+
