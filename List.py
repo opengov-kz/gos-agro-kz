@@ -28,7 +28,7 @@ class GosagroParser:
             "Referer": "https://gosagro.kz/",
             "Connection": "keep-alive"
         }
-        self.checkpoint_file = "CheckList.txt"  # Файл для чекпоинта
+        self.checkpoint_file = "CheckList.txt"
 
     def fetch_data(self, params):
         """Запрос данных с API"""
@@ -50,31 +50,10 @@ class GosagroParser:
             logger.error(f" Ошибка при запросе к API: {e}")
             return []
 
-    def save_to_csv(self, data, csv_path):
-        """Сохранение данных в CSV"""
-        if not data:
-            logger.warning("⚠ Список данных пуст. CSV не будет обновлен.")
-            return
-
-        file_exists = os.path.exists(csv_path)
-        fieldnames = data[0].keys()
-
-        with open(csv_path, "a", newline="", encoding="utf-8") as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
-            if not file_exists:
-                writer.writeheader()  # Записываем заголовки, если файл новый
-
-            writer.writerows(data)
-            csvfile.flush()
-            os.fsync(csvfile.fileno())  # Принудительно записываем на диск
-
-        logger.info(f" Данные сохранены в {csv_path} ({len(data)} записей).")
-
     def get_last_page(self):
         """Читаем чекпоинт (последняя загруженная страница)"""
         if os.path.exists(self.checkpoint_file):
-            with open(self.checkpoint_file, "r") as f:
+            with open(self.checkpoint_file, "r", encoding="utf-8") as f:
                 try:
                     return int(f.read().strip())
                 except ValueError:
@@ -83,38 +62,58 @@ class GosagroParser:
 
     def save_checkpoint(self, page):
         """Сохранение номера последней загруженной страницы"""
-        with open(self.checkpoint_file, "w") as f:
+        with open(self.checkpoint_file, "w", encoding="utf-8") as f:
             f.write(str(page))
 
     def fetch_all_reports(self, start_date, end_date, csv_path):
-        """Запрашивает отчет за весь период с постраничной загрузкой"""
+        """
+        Запрашивает отчёт за период с 'start_date' по 'end_date'
+        и сохраняет данные в новый CSV-файл, начиная с сохраненного
+        чекпоинта (номер страницы).
+        """
         page = self.get_last_page()
+        logger.info(f" Продолжим парсинг с {page}-й страницы (чекпоинт).")
 
-        while True:
-            params = {
-                "code": "report$its_req_wait",
-                "preparam1": "",
-                "preparam2": "",
-                "preparam3": start_date,
-                "preparam4": end_date,
-                "page": page,
-                "perpage": 500
-            }
+        with open(csv_path, "w", newline="", encoding="utf-8") as csvfile:
+            writer = None
 
-            data = self.fetch_data(params)
-            if data:
-                self.save_to_csv(data, csv_path)  # Дописываем данные в CSV
-                self.save_checkpoint(page)  # Обновляем чекпоинт
+            while True:
+                params = {
+                    "code": "report$its_req_wait",
+                    "preparam1": "",
+                    "preparam2": "",
+                    "preparam3": start_date,
+                    "preparam4": end_date,
+                    "page": page,
+                    "perpage": 500
+                }
+
+                data = self.fetch_data(params)
+
+                if not data:
+                    logger.info(f" Пустая страница №{page}. Парсинг завершён.")
+                    break
+
+                if writer is None:
+                    fieldnames = data[0].keys()
+                    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                    writer.writeheader()
+
+                writer.writerows(data)
+                csvfile.flush()
+                os.fsync(csvfile.fileno())
+
+                logger.info(f" Сохранено {len(data)} записей в файл: {csv_path}")
+
+                self.save_checkpoint(page)
                 page += 1
-            else:
-                break  # Если данных нет, завершаем
 
-            logger.info(f" Загружено {page - self.get_last_page()} страниц.")
-            time.sleep(2)  # Пауза перед следующим запросом
+                time.sleep(2)
 
     def run(self, csv_path):
-        """Основной метод для запуска парсинга"""
         logger.info(" Запуск парсера Gosagro")
+        logger.info(f" Результирующий файл: {csv_path}")
+
         start_date = "2023-01-01 00:00:00"
         end_date = datetime.now().strftime("%Y-%m-%d 23:59:59")
 
@@ -129,9 +128,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    csv_filename = args.output if args.output else "gosagro_reports.csv"
+    csv_filename = args.output if args.output else f"gosagro_reports_{timestamp}.csv"
 
-    logger.info(f" Файл будет сохранен по пути: {csv_filename}")
-
-    parser = GosagroParser()
-    parser.run(csv_filename)
+    gosagro_parser = GosagroParser()
+    gosagro_parser.run(csv_filename)
